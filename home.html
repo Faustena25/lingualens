@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}LinguaLens — Sentiment analysis for Indian code-switched text{% endblock %}
+
+{% block content %}
+
+<section class="ll-hero container">
+  <h1>
+    LinguaLens understands
+    <span class="lang-tanglish">romba</span> feelings,
+    <span class="lang-hinglish">bahut</span> emotions,
+    <span class="lang-tenglish">chala</span> context, and
+    <span class="lang-manglish">kollam</span> nuance —
+    in one dashboard.
+  </h1>
+  <p class="subtitle">
+    Sentiment analysis built for how 700 million Indians actually write online:
+    Tamil, Hindi, Telugu, and Malayalam mixed with English, in the same sentence.
+  </p>
+
+  <div class="ll-lang-chips">
+    <span class="ll-chip tanglish">Tanglish</span>
+    <span class="ll-chip hinglish">Hinglish</span>
+    <span class="ll-chip tenglish">Tenglish</span>
+    <span class="ll-chip manglish">Manglish</span>
+  </div>
+</section>
+
+<section class="ll-input-section container">
+  <div class="row g-4 justify-content-center">
+
+    <div class="col-md-6 col-lg-5">
+      <form class="ll-card youtube" id="youtube-form">
+        <div class="ll-card-icon">&#9654;</div>
+        <h3>Analyse a YouTube video</h3>
+        <p class="desc">Paste a trailer, review, ad, or any video link. We'll pull up to 500 comments automatically.</p>
+
+        <input
+          type="url"
+          class="ll-input"
+          id="youtube-url"
+          name="youtube_url"
+          placeholder="https://youtube.com/watch?v=..."
+          required
+        />
+        <div class="ll-error-text" id="youtube-error">Enter a valid YouTube video link.</div>
+
+        <button type="submit" class="ll-btn youtube" id="youtube-submit">
+          Analyse video
+        </button>
+      </form>
+    </div>
+
+    <div class="col-md-6 col-lg-5">
+      <form class="ll-card csv" id="csv-form">
+        <div class="ll-card-icon">&#128196;</div>
+        <h3>Upload a CSV</h3>
+        <p class="desc">For Amazon, Flipkart, Instagram, Facebook, or Twitter — scrape it yourself and upload a file with a <code>comment</code> or <code>review</code> column.</p>
+
+        <label class="ll-dropzone" id="csv-dropzone" for="csv-file">
+          <span id="csv-dropzone-text">Drag a CSV here, or click to browse</span>
+        </label>
+        <input type="file" id="csv-file" name="csv_file" accept=".csv" hidden required />
+        <div class="ll-error-text" id="csv-error">Please choose a .csv file with a comment or review column.</div>
+
+        <button type="submit" class="ll-btn csv" id="csv-submit">
+          Analyse CSV
+        </button>
+      </form>
+    </div>
+
+  </div>
+
+  <div class="ll-platform-row">
+    <span class="ll-platform-badge">YouTube</span>
+    <span class="ll-platform-badge">Amazon / Flipkart</span>
+    <span class="ll-platform-badge">Instagram / Facebook</span>
+    <span class="ll-platform-badge">Twitter</span>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,222 @@
+/* ============================================================
+   LinguaLens — design tokens
+   Palette drawn from India's linguistic map, not a stock gradient.
+   ============================================================ */
+:root {
+  --paper:        #FFF9F0;
+  --ink:          #1B1B2F;
+  --ink-soft:     #4A4A5E;
+
+  --saffron:      #F2994A;  /* primary accent */
+  --saffron-dark: #B8631F;
+
+  --tamil-teal:     #0E9594;
+  --hinglish-rose:  #E94F7A;
+  --tenglish-gold:  #D9A400;
+  --manglish-green: #3DB56D;
+
+  --card-border: rgba(27, 27, 47, 0.08);
+  --radius-lg: 20px;
+  --radius-md: 12px;
+
+  --font-display: 'Fraunces', serif;
+  --font-body: 'Work Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  margin: 0;
+}
+
+a { text-decoration: none; }
+
+/* ---------------- Nav ---------------- */
+.ll-nav {
+  border-bottom: 1px solid var(--card-border);
+  background: var(--paper);
+}
+.ll-logo {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+.ll-logo span { color: var(--saffron); }
+.ll-nav-links a {
+  color: var(--ink-soft);
+  font-weight: 500;
+  margin-left: 1.75rem;
+  font-size: 0.95rem;
+}
+.ll-nav-links a:hover { color: var(--ink); }
+
+/* ---------------- Hero ---------------- */
+.ll-hero {
+  padding: 4.5rem 0 3rem;
+  text-align: center;
+}
+.ll-hero h1 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2rem, 4vw, 3.1rem);
+  line-height: 1.25;
+  max-width: 880px;
+  margin: 0 auto 1.25rem;
+}
+.ll-hero .lang-tanglish   { color: var(--tamil-teal);     border-bottom: 3px solid var(--tamil-teal); }
+.ll-hero .lang-hinglish   { color: var(--hinglish-rose);  border-bottom: 3px solid var(--hinglish-rose); }
+.ll-hero .lang-tenglish   { color: var(--tenglish-gold);  border-bottom: 3px solid var(--tenglish-gold); }
+.ll-hero .lang-manglish   { color: var(--manglish-green); border-bottom: 3px solid var(--manglish-green); }
+
+.ll-hero p.subtitle {
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.ll-lang-chips {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 1.75rem 0 0;
+}
+.ll-chip {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.ll-chip.tanglish   { background: rgba(14,149,148,0.1);   color: var(--tamil-teal); }
+.ll-chip.hinglish   { background: rgba(233,79,122,0.1);   color: var(--hinglish-rose); }
+.ll-chip.tenglish   { background: rgba(217,164,0,0.12);   color: var(--tenglish-gold); }
+.ll-chip.manglish   { background: rgba(61,181,109,0.1);   color: var(--manglish-green); }
+
+/* ---------------- Input cards ---------------- */
+.ll-input-section {
+  padding: 1rem 0 5rem;
+}
+.ll-card {
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  height: 100%;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.ll-card:hover {
+  border-color: var(--saffron);
+  transform: translateY(-2px);
+}
+.ll-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  margin-bottom: 1.1rem;
+}
+.ll-card.youtube .ll-card-icon { background: rgba(233,79,122,0.12); color: var(--hinglish-rose); }
+.ll-card.csv .ll-card-icon     { background: rgba(14,149,148,0.12); color: var(--tamil-teal); }
+
+.ll-card h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.4rem;
+  margin-bottom: 0.4rem;
+}
+.ll-card p.desc {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  margin-bottom: 1.4rem;
+}
+
+.ll-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--card-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+}
+.ll-input:focus {
+  outline: none;
+  border-color: var(--saffron);
+}
+
+.ll-dropzone {
+  border: 1.5px dashed var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1.75rem 1rem;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+.ll-dropzone:hover { border-color: var(--tamil-teal); }
+.ll-dropzone.dragover { border-color: var(--tamil-teal); background: rgba(14,149,148,0.05); }
+.ll-dropzone .file-name {
+  font-family: var(--font-mono);
+  color: var(--tamil-teal);
+  font-weight: 500;
+}
+
+.ll-btn {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0.7rem 1.4rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  width: 100%;
+  transition: opacity 0.15s ease;
+}
+.ll-btn:hover { opacity: 0.9; }
+.ll-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ll-btn.youtube { background: var(--hinglish-rose); color: #fff; }
+.ll-btn.csv     { background: var(--tamil-teal); color: #fff; }
+
+.ll-platform-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.ll-platform-badge {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+}
+
+/* ---------------- Loading / error states (used later steps too) ---------------- */
+.ll-error-text {
+  color: var(--hinglish-rose);
+  font-size: 0.85rem;
+  margin-top: -0.5rem;
+  margin-bottom: 0.75rem;
+  display: none;
+}
+.ll-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  display: inline-block;
+  animation: ll-spin 0.7s linear infinite;
+  margin-right: 0.5rem;
+  vertical-align: -2px;
+}
+@keyframes ll-spin { to { transform: rotate(360deg); } }
