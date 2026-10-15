@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="obsidian">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LinguaLens · Explainable Sentiment Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+        /* ================= PALETTES (switch from the top bar) ================= */
+        :root,
+        [data-theme="obsidian"] {
+            --bg: #0a0c13;
+            --surface: #11141e;
+            --surface2: #171b28;
+            --line: #222839;
+            --ink: #e8ebf4;
+            --mute: #8089a2;
+            --accent: #8b7bff;
+            --accent2: #c3b8ff;
+            --pos: #3ddc97;
+            --neg: #ff5d73;
+            --neu: #8b93a7;
+            --unc: #f5b942;
+        }
+
+        [data-theme="teal"] {
+            --bg: #060f0e;
+            --surface: #0c1816;
+            --surface2: #112220;
+            --line: #1b332f;
+            --ink: #e4f3f0;
+            --mute: #7a9a95;
+            --accent: #2dd4bf;
+            --accent2: #99f0e3;
+            --pos: #8be28b;
+            --neg: #ff6b6b;
+            --neu: #84a09b;
+            --unc: #f2c14e;
+        }
+
+        [data-theme="ember"] {
+            --bg: #0f0b09;
+            --surface: #18120f;
+            --surface2: #211915;
+            --line: #33271f;
+            --ink: #f5ece6;
+            --mute: #a08d80;
+            --accent: #ff9f43;
+            --accent2: #ffd1a3;
+            --pos: #6fd98c;
+            --neg: #ff5470;
+            --neu: #a39485;
+            --unc: #ffd54a;
+        }
+
+        [data-theme="arctic"] {
+            --bg: #080d18;
+            --surface: #0e1626;
+            --surface2: #142036;
+            --line: #1f2f4a;
+            --ink: #e6eefb;
+            --mute: #7f93b3;
+            --accent: #4da3ff;
+            --accent2: #a7d1ff;
+            --pos: #34d399;
+            --neg: #fb7185;
+            --neu: #8498b8;
+            --unc: #fbbf24;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: "IBM Plex Sans", system-ui, Segoe UI, Arial, sans-serif;
+            font-size: 14px;
+            background-image:
+                radial-gradient(900px 500px at 85% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+                radial-gradient(700px 400px at -5% 110%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%);
+            background-attachment: fixed;
+        }
+
+        .mono {
+            font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* ================= LAYOUT ================= */
+        .app {
+            display: grid;
+            grid-template-columns: 232px 1fr;
+            min-height: 100vh;
+        }
+
+        aside {
+            border-right: 1px solid var(--line);
+            padding: 22px 16px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            background: color-mix(in srgb, var(--surface) 80%, transparent);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 8px 24px;
+        }
+
+        .logo {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #000));
+            box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 45%, transparent);
+        }
+
+        .brand b {
+            font-family: Fraunces, serif;
+            font-size: 20px;
+            letter-spacing: .2px;
+        }
+
+        .brand small {
+            display: block;
+            color: var(--mute);
+            font-size: 10.5px;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+            margin-top: 1px;
+        }
+
+        nav {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            color: var(--mute);
+            font-weight: 500;
+            border: 1px solid transparent;
+            transition: .15s;
+        }
+
+        .nav:hover {
+            color: var(--ink);
+            background: var(--surface2);
+        }
+
+        .nav.active {
+            color: var(--ink);
+            background: color-mix(in srgb, var(--accent) 14%, transparent);
+            border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+        }
+
+        .nav svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .side-foot {
+            margin-top: auto;
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--surface);
+            font-size: 12px;
+            color: var(--mute);
+        }
+
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--neu);
+            margin-right: 8px;
+        }
+
+        .dot.on {
+            background: var(--pos);
+            box-shadow: 0 0 8px var(--pos);
+        }
+
+        .dot.off {
+            background: var(--neg);
+        }
+
+        .main {
+            padding: 22px 34px 60px;
+            max-width: 1240px;
+            width: 100%;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 22px;
+            flex-wrap: wrap;
+        }
+
+        .topbar h2 {
+            margin: 0;
+            font-family: Fraunces, serif;
+            font-size: 26px;
+            font-weight: 600;
+        }
+
+        .topbar p {
+            margin: 3px 0 0;
+            color: var(--mute);
+        }
+
+        .palette {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--mute);
+            font-size: 12px;
+        }
+
+        .sw {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid var(--line);
+            transition: .15s;
+        }
+
+        .sw:hover {
+            transform: scale(1.12);
+        }
+
+        .sw.active {
+            border-color: var(--ink);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 15%, transparent);
+        }
+
+        /* ================= COMPONENTS ================= */
+        .card {
+            background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 92%, #000));
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 18px;
+        }
+
+        .card h3 {
+            margin: 0 0 14px;
+            font-size: 11.5px;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+            color: var(--mute);
+            font-weight: 600;
+        }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1.35fr 1fr;
+            gap: 18px;
+        }
+
+        .grid2>.card {
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 1000px) {
+            .app {
+                grid-template-columns: 1fr;
+            }
+
+            aside {
+                display: none;
+            }
+
+            .grid2 {
+                grid-template-columns: 1fr;
+            }
+
+            .main {
+                padding: 18px;
+            }
+        }
+
+        textarea,
+        input,
+        select {
+            width: 100%;
+            padding: 12px 14px;
+            color: var(--ink);
+            background: var(--bg);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            font: inherit;
+            outline: none;
+            transition: .15s;
+        }
+
+        textarea:focus,
+        input:focus,
+        select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+        }
+
+        textarea {
+            min-height: 110px;
+            resize: vertical;
+            font-size: 15.5px;
+            line-height: 1.55;
+        }
+
+        input[type=file] {
+            padding: 9px;
+        }
+
+        input[type=file]::file-selector-button {
+            background: var(--surface2);
+            color: var(--ink);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 6px 12px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        button {
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 10px;
+            padding: 11px 20px;
+            border: 0;
+            transition: .15s;
+            background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 65%, #000));
+            color: #fff;
+            box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 30%, transparent);
+        }
+
+        button:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: .5;
+            cursor: wait;
+            transform: none;
+        }
+
+        button.ghost {
+            background: transparent;
+            color: var(--ink);
+            border: 1px solid var(--line);
+            box-shadow: none;
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        button.ghost:hover {
+            border-color: var(--accent);
+            color: var(--accent2);
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .chip {
+            padding: 5px 12px;
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--mute);
+            cursor: pointer;
+            background: var(--surface2);
+            transition: .15s;
+        }
+
+        .chip:hover {
+            color: var(--ink);
+            border-color: var(--accent);
+        }
+
+        .chip.on {
+            color: var(--ink);
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 18%, transparent);
+        }
+
+        .err {
+            color: var(--neg);
+            font-weight: 500;
+            margin-top: 10px;
+            min-height: 18px;
+        }
+
+        .mute {
+            color: var(--mute);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 11px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--c);
+            background: color-mix(in srgb, var(--c) 14%, transparent);
+            border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+        }
+
+        .badge::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--c);
+        }
+
+        .Positive {
+            --c: var(--pos);
+        }
+
+        .Negative {
+            --c: var(--neg);
+        }
+
+        .Neutral {
+            --c: var(--neu);
+        }
+
+        .Uncertain {
+            --c: var(--unc);
+        }
+
+        /* verdict */
+        .verdict-label {
+            font-family: Fraunces, serif;
+            font-size: 40px;
+            line-height: 1;
+            margin: 6px 0 4px;
+            color: var(--c);
+        }
+
+        .gauge {
+            position: relative;
+            width: 120px;
+            height: 120px;
+        }
+
+        .gauge svg {
+            transform: rotate(-90deg);
+        }
+
+        .gauge .num {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .verdict {
+            display: flex;
+            gap: 22px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .pbar {
+            margin-top: 14px;
+        }
+
+        .pbar .t {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12.5px;
+            margin-bottom: 5px;
+        }
+
+        .pbar .track {
+            height: 7px;
+            background: var(--bg);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .pbar .fill {
+            height: 100%;
+            border-radius: 6px;
+            background: var(--c);
+            transition: width .7s cubic-bezier(.2, .8, .2, 1);
+            box-shadow: 0 0 12px var(--c);
+        }
+
+        /* ================= EXPLAINABILITY ================= */
+        .xai-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .legend {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--mute);
+            align-items: center;
+        }
+
+        .legend i {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            margin-right: 6px;
+            vertical-align: -1px;
+        }
+
+        .heat {
+            line-height: 2.4;
+            font-size: 18px;
+            padding: 16px;
+            background: var(--bg);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+        }
+
+        .tok {
+            display: inline-block;
+            padding: 1px 8px;
+            margin: 0 2px;
+            border-radius: 6px;
+            cursor: default;
+            position: relative;
+            border-bottom: 2px solid transparent;
+            transition: .12s;
+        }
+
+        .tok.p {
+            border-bottom-color: var(--pos);
+        }
+
+        .tok.n {
+            border-bottom-color: var(--neg);
+        }
+
+        .tok:hover {
+            transform: translateY(-2px);
+            outline: 1px solid var(--ink);
+            z-index: 2;
+        }
+
+        .tok .tip {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            pointer-events: none;
+            background: #000;
+            color: #fff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 5px 9px;
+            font-size: 12px;
+            opacity: 0;
+            transition: .12s;
+            font-family: "IBM Plex Mono", monospace;
+            line-height: 1.3;
+        }
+
+        .tok:hover .tip {
+            opacity: 1;
+        }
+
+        .xgrid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 18px;
+            margin-top: 18px;
+        }
+
+        @media (max-width: 1000px) {
+            .xgrid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .axis-lbl {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--mute);
+            margin-bottom: 8px;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+        }
+
+        .drow {
+            display: grid;
+            grid-template-columns: 118px 1fr 62px;
+            gap: 10px;
+            align-items: center;
+            margin: 5px 0;
+        }
+
+        .drow .w {
+            text-align: right;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 13px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .drow .tr {
+            position: relative;
+            height: 20px;
+        }
+
+        .drow .tr::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: -3px;
+            bottom: -3px;
+            width: 1px;
+            background: var(--line);
+        }
+
+        .drow .b {
+            position: absolute;
+            top: 3px;
+            height: 14px;
+            border-radius: 4px;
+            transition: width .6s cubic-bezier(.2, .8, .2, 1);
+        }
+
+        .drow .b.p {
+            left: 50%;
+            background: linear-gradient(90deg, color-mix(in srgb, var(--pos) 55%, transparent), var(--pos));
+        }
+
+        .drow .b.n {
+            right: 50%;
+            background: linear-gradient(270deg, color-mix(in srgb, var(--neg) 55%, transparent), var(--neg));
+        }
+
+        .drow .v {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .drivers h4 {
+            margin: 0 0 8px;
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .drivers .grp {
+            margin-bottom: 16px;
+        }
+
+        .pill {
+            display: inline-flex;
+            gap: 6px;
+            align-items: baseline;
+            padding: 4px 10px;
+            margin: 0 6px 6px 0;
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--c) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 13px;
+        }
+
+        .pill small {
+            color: var(--c);
+            font-size: 11px;
+        }
+
+        .sumline {
+            margin-top: 6px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: var(--bg);
+            border: 1px dashed var(--line);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .sumline b {
+            color: var(--accent2);
+        }
+
+        .skel {
+            height: 14px;
+            border-radius: 6px;
+            margin: 10px 0;
+            background: linear-gradient(90deg, var(--surface2), var(--line), var(--surface2));
+            background-size: 200% 100%;
+            animation: sh 1.2s infinite;
+        }
+
+        @keyframes sh {
+            to {
+                background-position: -200% 0;
+            }
+        }
+
+        /* ================= RESULTS DASHBOARD ================= */
+        .kpis {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .kpi {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 16px;
+            border-top: 3px solid var(--c, var(--accent));
+        }
+
+        .kpi .l {
+            font-size: 11px;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+            color: var(--mute);
+        }
+
+        .kpi .n {
+            font-size: 30px;
+            font-weight: 600;
+            margin-top: 6px;
+            font-family: Fraunces, serif;
+        }
+
+        .kpi .s {
+            font-size: 12px;
+            color: var(--mute);
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .toolbar input {
+            max-width: 260px;
+            padding: 8px 12px;
+        }
+
+        .tblwrap {
+            max-height: 520px;
+            overflow: auto;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: var(--surface2);
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 11px;
+            letter-spacing: 1.3px;
+            text-transform: uppercase;
+            color: var(--mute);
+        }
+
+        td {
+            padding: 11px 14px;
+            border-top: 1px solid var(--line);
+            vertical-align: top;
+            line-height: 1.5;
+        }
+
+        tr:hover td {
+            background: color-mix(in srgb, var(--accent) 6%, transparent);
+        }
+
+        .topwords {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        @media (max-width: 700px) {
+            .topwords {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* drawer */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .55);
+            backdrop-filter: blur(3px);
+            z-index: 40;
+        }
+
+        .drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: min(560px, 100%);
+            background: var(--surface);
+            border-left: 1px solid var(--line);
+            z-index: 50;
+            padding: 24px;
+            overflow: auto;
+            animation: slide .25s ease;
+        }
+
+        @keyframes slide {
+            from {
+                transform: translateX(40px);
+                opacity: 0;
+            }
+        }
+
+        .drawer .x {
+            float: right;
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--line);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <aside>
+            <div class="brand">
+                <div class="logo">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="M21 21l-4.3-4.3" />
+                        <path d="M8 11h6M11 8v6" opacity=".7" />
+                    </svg>
+                </div>
+                <div><b>LinguaLens</b><small>Explainable NLP</small></div>
+            </div>
+            <nav>
+                <div class="nav active" data-t="text">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 6h16M4 12h10M4 18h14" />
+                    </svg>Analyze &amp; Explain
+                </div>
+                <div class="nav" data-t="yt">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="6" width="18" height="12" rx="3" />
+                        <path d="M10 9.5v5l4.5-2.5z" />
+                    </svg>YouTube Comments
+                </div>
+                <div class="nav" data-t="csv">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                        <path d="M14 3v5h5M9 13h6M9 17h6" />
+                    </svg>CSV Batch
+                </div>
+            </nav>
+            <div class="side-foot"><span class="dot" id="hDot"></span><span id="hTxt">Checking API…</span>
+                <div style="margin-top:6px">XLM-RoBERTa · SHAP</div>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="topbar">
+                <div>
+                    <h2 id="pgTitle">Analyze &amp; Explain</h2>
+                    <p id="pgSub">Tanglish · Hinglish · Manglish — see exactly which words drive the verdict.</p>
+                </div>
+                <div class="palette">Palette
+                    <div class="sw active" data-p="obsidian" title="Obsidian Violet"
+                        style="background:linear-gradient(135deg,#0a0c13 50%,#8b7bff 50%)"></div>
+                    <div class="sw" data-p="teal" title="Deep Teal"
+                        style="background:linear-gradient(135deg,#060f0e 50%,#2dd4bf 50%)"></div>
+                    <div class="sw" data-p="ember" title="Ember Amber"
+                        style="background:linear-gradient(135deg,#0f0b09 50%,#ff9f43 50%)"></div>
+                    <div class="sw" data-p="arctic" title="Arctic Blue"
+                        style="background:linear-gradient(135deg,#080d18 50%,#4da3ff 50%)"></div>
+                </div>
+            </div>
+
+            <!-- ============ TEXT ============ -->
+            <section id="text">
+                <div class="card">
+                    <h3>Input</h3>
+                    <textarea id="txt"
+                        placeholder="Type a code-mixed sentence, e.g. Intha padam semma mass da!"></textarea>
+                    <div class="chips" id="samples">
+                        <span class="chip">Intha padam semma mass da!</span>
+                        <span class="chip">Ye movie bakwaas thi, paisa waste</span>
+                        <span class="chip">Climax kollam but first half bore aayi</span>
+                    </div>
+                    <div class="actions">
+                        <button id="btnPredict">Analyze &amp; Explain</button>
+                        <span class="mute" style="font-size:12px">Prediction appears first; SHAP attribution
+                            follows.</span>
+                    </div>
+                    <div id="textErr" class="err"></div>
+                </div>
+
+                <div id="predCard" class="card hidden">
+                    <h3>Verdict</h3>
+                    <div class="verdict">
+                        <div style="flex:1">
+                            <div class="mute" style="font-size:12px">Predicted sentiment</div>
+                            <div id="predLabel" class="verdict-label"></div>
+                            <div id="predNote" class="mute" style="font-size:12.5px"></div>
+                        </div>
+                        <div class="gauge" id="gauge"></div>
+                        <div style="flex:1.1" id="scoreBars"></div>
+                    </div>
+                </div>
+
+                <div id="expCard" class="card hidden">
+                    <h3>Explainability · word-level SHAP attribution</h3>
+                    <div id="expBody"></div>
+                </div>
+            </section>
+
+            <!-- ============ YOUTUBE ============ -->
+            <section id="yt" class="hidden">
+                <div class="card">
+                    <h3>Video source</h3>
+                    <input id="ytUrl" placeholder="Paste a YouTube video URL">
+                    <div class="actions">
+                        <span class="mute">Comments</span>
+                        <input id="ytMax" type="number" value="50" min="5" max="500" style="width:100px">
+                        <button id="btnYt">Fetch &amp; Analyze</button>
+                    </div>
+                    <div id="ytErr" class="err"></div>
+                </div>
+                <div id="ytCard" class="hidden"></div>
+            </section>
+
+            <!-- ============ CSV ============ -->
+            <section id="csv" class="hidden">
+                <div class="card">
+                    <h3>Dataset</h3>
+                    <input id="csvFile" type="file" accept=".csv">
+                    <div class="actions">
+                        <span class="mute">Column</span><input id="csvCol" placeholder="auto-detect"
+                            style="width:170px">
+                        <span class="mute">Max rows</span><input id="csvMax" type="number" value="200" min="5" max="500"
+                            style="width:100px">
+                        <button id="btnCsv">Upload &amp; Analyze</button>
+                    </div>
+                    <div id="csvErr" class="err"></div>
+                </div>
+                <div id="csvCard" class="hidden"></div>
+            </section>
+        </div>
+    </div>
+
+    <div id="drawerRoot"></div>
+
+    <script>
+        const API = location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+        const LABELS = ['Positive', 'Negative', 'Neutral', 'Uncertain'];
+        const varOf = l => `var(--${({ Positive: 'pos', Negative: 'neg', Neutral: 'neu', Uncertain: 'unc' })[l] || 'accent'})`;
+        const hexOf = l => cssv(`--${({ Positive: 'pos', Negative: 'neg', Neutral: 'neu', Uncertain: 'unc' })[l] || 'accent'}`);
+
+        /* ---------- Theme ---------- */
+        function setTheme(p) {
+            document.documentElement.dataset.theme = p;
+            document.querySelectorAll('.sw').forEach(s => s.classList.toggle('active', s.dataset.p === p));
+            try { localStorage.setItem('ll-theme', p); } catch (e) { }
+            Object.values(VIEWS).forEach(v => v.redrawChart && v.redrawChart());
+        }
+        document.querySelectorAll('.sw').forEach(s => s.onclick = () => setTheme(s.dataset.p));
+
+        /* ---------- Navigation ---------- */
+        const TITLES = {
+            text: ['Analyze & Explain', 'Tanglish · Hinglish · Manglish — see exactly which words drive the verdict.'],
+            yt: ['YouTube Comments', 'Audience sentiment at scale — click any comment to see why.'],
+            csv: ['CSV Batch', 'Bulk-score a dataset and drill into any row.']
+        };
+        document.querySelectorAll('.nav').forEach(n => n.onclick = () => {
+            document.querySelectorAll('.nav').forEach(x => x.classList.toggle('active', x === n));
+            ['text', 'yt', 'csv'].forEach(id => $(id).classList.toggle('hidden', n.dataset.t !== id));
+            $('pgTitle').textContent = TITLES[n.dataset.t][0]; $('pgSub').textContent = TITLES[n.dataset.t][1];
+        });
+
+        /* ---------- API ---------- */
+        async function post(path, body) {
+            const r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error || 'Request failed');
+            return j;
+        }
+        fetch(API + '/health').then(r => r.json()).then(() => { $('hDot').className = 'dot on'; $('hTxt').textContent = 'API online'; })
+            .catch(() => { $('hDot').className = 'dot off'; $('hTxt').textContent = 'API offline'; });
+
+        /* ---------- Normalizers ---------- */
+        function normScores(s) {
+            if (!s) return {};
+            if (Array.isArray(s)) return Object.fromEntries(s.map((v, i) => [['Negative', 'Neutral', 'Positive'][i] || i, v]));
+            return s;
+        }
+        function findPairs(o) {
+            if (Array.isArray(o)) {
+                if (o.length && Array.isArray(o[0]) && typeof o[0][0] === 'string') return o.map(p => [p[0], Number(p[1])]);
+                if (o.length && typeof o[0] === 'object' && !Array.isArray(o[0])) {
+                    const k = Object.keys(o[0]);
+                    const tk = k.find(x => /token|word/i.test(x)), vk = k.find(x => /value|shap|score|weight|impact/i.test(x));
+                    if (tk && vk) return o.map(p => [p[tk], Number(p[vk])]);
+                }
+            } else if (o && typeof o === 'object') {
+                const keys = Object.keys(o);
+                const tk = keys.find(x => /^tokens?$|words?/i.test(x) && Array.isArray(o[x]));
+                const vk = keys.find(x => /value|shap|score|weight|impact/i.test(x) && Array.isArray(o[x]));
+                if (tk && vk) return o[tk].map((t, i) => [t, Number(o[vk][i])]);
+                for (const k of keys) { const r = findPairs(o[k]); if (r) return r; }
+            }
+            return null;
+        }
+        /* merge sentencepiece sub-tokens into whole words, drop specials */
+        function cleanPairs(pairs) {
+            const sp = pairs.some(p => String(p[0]).startsWith('▁'));
+            const out = [];
+            pairs.forEach(([t, v]) => {
+                t = String(t);
+                if (/^<\/?s>$|^<pad>$|^\[(CLS|SEP)\]$/.test(t.trim())) return;
+                const newWord = !sp || t.startsWith('▁') || t.startsWith(' ') || !out.length;
+                const clean = t.replace(/^▁|^\s+/, '');
+                if (!clean && !newWord) return;
+                if (newWord) out.push([clean, v]); else { out[out.length - 1][0] += clean; out[out.length - 1][1] += v; }
+            });
+            return out.filter(p => p[0].trim().length);
+        }
+
+        /* ================= EXPLANATION RENDERER ================= */
+        function renderExplain(el, raw, label) {
+            const pairs0 = findPairs(raw);
+            if (!pairs0) { el.innerHTML = `<div class="mute">Could not parse explanation. Raw response:</div><pre class="mono">${esc(JSON.stringify(raw, null, 2))}</pre>`; return; }
+            label = label || raw.label || raw.predicted_label || raw.prediction || 'prediction';
+            const pairs = cleanPairs(pairs0);
+            const max = Math.max(...pairs.map(p => Math.abs(p[1])), 1e-9);
+            const total = pairs.reduce((a, p) => a + p[1], 0);
+            const sup = pairs.filter(p => p[1] > 0).sort((a, b) => b[1] - a[1]);
+            const opp = pairs.filter(p => p[1] < 0).sort((a, b) => a[1] - b[1]);
+            const top = [...pairs].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 12);
+            const supSum = sup.reduce((a, p) => a + p[1], 0), oppSum = Math.abs(opp.reduce((a, p) => a + p[1], 0));
+            const share = (supSum + oppSum) ? Math.round(supSum / (supSum + oppSum) * 100) : 50;
+            const L = esc(label);
+
+            const heat = pairs.map(([t, v]) => {
+                const pct = Math.round(Math.min(Math.abs(v) / max, 1) * 70 + 6);
+                const side = v >= 0 ? 'pos' : 'neg';
+                return `<span class="tok ${v >= 0 ? 'p' : 'n'}" style="background:color-mix(in srgb, var(--${side}) ${pct}%, transparent)">${esc(t)}<span class="tip">${v >= 0 ? '+' : ''}${v.toFixed(4)} · ${v >= 0 ? 'supports' : 'opposes'} ${L}</span></span>`;
+            }).join(' ');
+
+            const bars = top.map(([t, v]) => {
+                const w = Math.abs(v) / max * 50;
+                return `<div class="drow"><div class="w" title="${esc(t)}">${esc(t)}</div>
+            <div class="tr"><div class="b ${v >= 0 ? 'p' : 'n'}" style="width:0" data-w="${w}%"></div></div>
+            <div class="v" style="color:var(--${v >= 0 ? 'pos' : 'neg'})">${v >= 0 ? '+' : ''}${v.toFixed(3)}</div></div>`;
+            }).join('');
+
+            const pills = (arr, c) => arr.slice(0, 6).map(([t, v]) => `<span class="pill" style="--c:var(--${c})">${esc(t)}<small>${v > 0 ? '+' : ''}${v.toFixed(3)}</small></span>`).join('') || '<span class="mute">None</span>';
+
+            const lead = sup[0], opposer = opp[0];
+            const story = `The model predicts <b>${L}</b> mainly because of ${lead ? `<b>“${esc(lead[0])}”</b>` : 'no single word'}${sup[1] ? ` and <b>“${esc(sup[1][0])}”</b>` : ''}.` +
+                (opposer ? ` The strongest resistance comes from <b>“${esc(opposer[0])}”</b>, which pushes the other way.` : ' No word pushes against this prediction.') +
+                ` Supporting words account for <b>${share}%</b> of total attribution weight.`;
+
+            el.innerHTML = `
+        <div class="xai-head">
+            <div class="legend"><span><i style="background:var(--pos)"></i>Supports ${L}</span><span><i style="background:var(--neg)"></i>Opposes ${L}</span><span class="mute">Colour intensity = influence strength</span></div>
+            <div class="mono mute" style="font-size:12px">Σ attribution = ${total >= 0 ? '+' : ''}${total.toFixed(3)}</div>
+        </div>
+        <div class="heat">${heat}</div>
+        <div class="sumline" style="margin-top:14px">${story}</div>
+        <div class="xgrid">
+            <div>
+                <div class="axis-lbl"><span>← opposes ${L}</span><span>top ${top.length} words by impact</span><span>supports ${L} →</span></div>
+                ${bars}
+            </div>
+            <div class="drivers">
+                <div class="grp"><h4 style="color:var(--pos)">Top supporting words</h4>${pills(sup, 'pos')}</div>
+                <div class="grp"><h4 style="color:var(--neg)">Top opposing words</h4>${pills(opp, 'neg')}</div>
+                <div class="axis-lbl" style="margin-bottom:6px"><span>Support</span><span>Oppose</span></div>
+                <div style="display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--bg)">
+                    <div style="width:${share}%;background:var(--pos)"></div><div style="flex:1;background:var(--neg)"></div>
+                </div>
+            </div>
+        </div>`;
+            requestAnimationFrame(() => setTimeout(() => el.querySelectorAll('.b[data-w]').forEach(b => b.style.width = b.dataset.w), 30));
+        }
+        const skeleton = () => `<div class="skel" style="width:90%"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:55%"></div>`;
+
+        /* ================= TEXT TAB ================= */
+        document.querySelectorAll('#samples .chip').forEach(c => c.onclick = () => { $('txt').value = c.textContent; });
+
+        function renderVerdict(r) {
+            const scores = normScores(r.scores);
+            const label = r.label;
+            const conf = scores[label] != null ? scores[label] : Math.max(0, ...Object.values(scores).map(Number));
+            $('predCard').classList.remove('hidden');
+            const lbl = $('predLabel'); lbl.textContent = label; lbl.style.setProperty('--c', varOf(label));
+            $('predNote').textContent = label === 'Uncertain' ? 'Confidence below threshold — treat with caution.' : `Highest-probability class`;
+            const R = 50, C = 2 * Math.PI * R, col = hexOf(label);
+            $('gauge').innerHTML = `<svg width="120" height="120"><circle cx="60" cy="60" r="${R}" fill="none" stroke="${cssv('--line')}" stroke-width="9"/>
+        <circle cx="60" cy="60" r="${R}" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - conf)}" style="filter:drop-shadow(0 0 6px ${col});transition:stroke-dashoffset .8s"/></svg>
+        <div class="num">${(conf * 100).toFixed(0)}%</div>`;
+            $('scoreBars').innerHTML = Object.entries(scores).map(([k, v]) =>
+                `<div class="pbar" style="--c:${varOf(k)}"><div class="t"><span>${esc(k)}</span><b class="mono">${(v * 100).toFixed(1)}%</b></div>
+         <div class="track"><div class="fill" style="width:${v * 100}%"></div></div></div>`).join('');
+        }
+
+        $('btnPredict').onclick = async () => {
+            const text = $('txt').value.trim(); $('textErr').textContent = '';
+            if (!text) return $('textErr').textContent = 'Enter some text first.';
+            const b = $('btnPredict'); b.disabled = true; b.textContent = 'Analyzing…';
+            $('expCard').classList.remove('hidden'); $('expBody').innerHTML = skeleton();
+            let label;
+            try {
+                const r = await post('/predict', { text }); label = r.label; renderVerdict(r);
+            } catch (e) { $('textErr').textContent = e.message; $('expCard').classList.add('hidden'); b.disabled = false; b.textContent = 'Analyze & Explain'; return; }
+            b.textContent = 'Explaining…';
+            try { renderExplain($('expBody'), await post('/explain', { text }), label); }
+            catch (e) { $('expBody').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+            b.disabled = false; b.textContent = 'Analyze & Explain';
+        };
+
+        /* ================= DRAWER (per-comment explanation) ================= */
+        async function openDrawer(text, label) {
+            $('drawerRoot').innerHTML = `<div class="overlay"></div><div class="drawer">
+        <button class="ghost x">Close ✕</button>
+        <h3 style="margin:0 0 6px;font-size:11.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--mute)">Why this prediction?</h3>
+        <span class="badge ${esc(label)}" style="margin-bottom:12px">${esc(label)}</span>
+        <p style="font-size:15.5px;line-height:1.6;margin:12px 0 18px">${esc(text)}</p><div id="dBody">${skeleton()}</div></div>`;
+            const close = () => $('drawerRoot').innerHTML = '';
+            $('drawerRoot').querySelector('.overlay').onclick = close; $('drawerRoot').querySelector('.x').onclick = close;
+            try { renderExplain($('dBody'), await post('/explain', { text }), label); }
+            catch (e) { $('dBody').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+        }
+
+        /* ================= RESULTS DASHBOARD (YouTube + CSV) ================= */
+        const STOP = new Set('the and for you that this with are was but not have from your they what when how all can just its out del hai hain ka ki ke ko se me mein par aur bhi nahi nahin hum tum yeh ye woh wo oru enna intha atha ithu athu illa irukku nu da la na ee aa oru ente ningal njan athe oru'.split(' '));
+        function topWords(rows, label) {
+            const m = {};
+            rows.filter(x => x.label === label).forEach(x => (x.text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).forEach(w => {
+                if (w.length > 2 && !STOP.has(w) && !/^\d+$/.test(w)) m[w] = (m[w] || 0) + 1;
+            }));
+            return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10);
+        }
+
+        const VIEWS = {};
+        function makeView(p) {
+            let data = [], chart, last, filter = '', q = '';
+            const root = $(p + 'Card');
+            const rows = () => data.filter(x => (!filter || x.label === filter) && (!q || x.text.toLowerCase().includes(q)));
+            const drawTable = () => {
+                $(p + 'Body').innerHTML = rows().map(x => {
+                    const i = data.indexOf(x);
+                    return `<tr><td>${esc(x.text)}</td><td><span class="badge ${esc(x.label)}">${esc(x.label)}</span></td><td><button class="ghost" data-i="${i}">Why?</button></td></tr>`;
+                }).join('') || `<tr><td colspan="3" class="mute">No matching comments.</td></tr>`;
+                $(p + 'Body').querySelectorAll('button').forEach(b => b.onclick = () => { const x = data[b.dataset.i]; openDrawer(x.text, x.label); });
+                $(p + 'Count').textContent = `${rows().length} of ${data.length}`;
+            };
+            const drawChart = () => {
+                if (!last) return;
+                if (chart) chart.destroy();
+                const keys = Object.keys(last.summary);
+                chart = new Chart($(p + 'Chart'), {
+                    type: 'doughnut',
+                    data: { labels: keys, datasets: [{ data: keys.map(k => last.summary[k]), backgroundColor: keys.map(hexOf), borderColor: cssv('--surface'), borderWidth: 3, hoverOffset: 6 }] },
+                    options: { cutout: '68%', plugins: { legend: { position: 'bottom', labels: { color: cssv('--mute'), usePointStyle: true, padding: 16 } } } }
+                });
+            };
+            const view = (r, extra) => {
+                last = r; data = r.results; filter = ''; q = '';
+                const S = r.summary, tot = r.total || data.length || 1;
+                const kpi = (l, n, c) => `<div class="kpi" style="--c:${c}"><div class="l">${l}</div><div class="n">${n}</div><div class="s">${l === 'Analysed' ? (extra || '') : (n / tot * 100).toFixed(1) + '% of total'}</div></div>`;
+                const tw = l => topWords(data, l).map(([w, c]) => `<span class="pill" style="--c:${varOf(l)}">${esc(w)}<small>×${c}</small></span>`).join('') || '<span class="mute">Not enough data</span>';
+                root.classList.remove('hidden');
+                root.innerHTML = `
+            <div class="kpis">${kpi('Analysed', r.total, 'var(--accent)')}${Object.keys(S).map(k => kpi(k, S[k], varOf(k))).join('')}</div>
+            <div class="grid2" style="margin-bottom:18px">
+                <div class="card"><h3>Sentiment distribution</h3><div style="max-width:320px;margin:auto"><canvas id="${p}Chart"></canvas></div></div>
+                <div class="card"><h3>Most frequent words by sentiment</h3>
+                    <div style="margin-bottom:16px"><h4 style="margin:0 0 8px;color:var(--pos);font-size:12px;letter-spacing:1px">POSITIVE</h4>${tw('Positive')}</div>
+                    <div><h4 style="margin:0 0 8px;color:var(--neg);font-size:12px;letter-spacing:1px">NEGATIVE</h4>${tw('Negative')}</div>
+                    <p class="mute" style="font-size:12px;margin:14px 0 0">Frequency only — open “Why?” on any row for true SHAP attribution.</p>
+                </div>
+            </div>
+            <div class="card"><h3>Comments</h3>
+                <div class="toolbar">
+                    <span class="chip on" data-f="">All</span>
+                    ${Object.keys(S).map(k => `<span class="chip" data-f="${k}">${k}</span>`).join('')}
+                    <input id="${p}Q" placeholder="Search comments…" style="margin-left:auto">
+                    <span class="mute mono" id="${p}Count" style="font-size:12px"></span>
+                </div>
+                <div class="tblwrap"><table><thead><tr><th>Comment</th><th style="width:120px">Sentiment</th><th style="width:80px"></th></tr></thead><tbody id="${p}Body"></tbody></table></div>
+            </div>`;
+                root.querySelectorAll('.chip[data-f]').forEach(c => c.onclick = () => {
+                    filter = c.dataset.f; root.querySelectorAll('.chip[data-f]').forEach(x => x.classList.toggle('on', x === c)); drawTable();
+                });
+                $(p + 'Q').oninput = e => { q = e.target.value.toLowerCase(); drawTable(); };
+                drawChart(); drawTable();
+            };
+            view.redrawChart = drawChart;
+            VIEWS[p] = view;
+            return view;
+        }
+        const showYt = makeView('yt'), showCsv = makeView('csv');
+
+        /* ---------- YouTube ---------- */
+        $('btnYt').onclick = async () => {
+            $('ytErr').textContent = '';
+            const url = $('ytUrl').value.trim();
+            if (!url) return $('ytErr').textContent = 'Paste a video URL.';
+            const b = $('btnYt'); b.disabled = true; b.textContent = 'Working…';
+            try { showYt(await post('/youtube', { url, max_comments: Number($('ytMax').value) || 50 })); }
+            catch (e) { $('ytErr').textContent = e.message; }
+            b.disabled = false; b.textContent = 'Fetch & Analyze';
+        };
+
+        /* ---------- CSV ---------- */
+        $('btnCsv').onclick = async () => {
+            $('csvErr').textContent = '';
+            const file = $('csvFile').files[0];
+            if (!file) return $('csvErr').textContent = 'Choose a CSV file first.';
+            const fd = new FormData(); fd.append('file', file);
+            const col = $('csvCol').value.trim(); if (col) fd.append('column', col);
+            fd.append('max_rows', $('csvMax').value || 200);
+            const b = $('btnCsv'); b.disabled = true; b.textContent = 'Working…';
+            try {
+                const resp = await fetch(API + '/csv', { method: 'POST', body: fd });
+                const r = await resp.json();
+                if (!resp.ok) throw new Error(r.error || 'Request failed');
+                showCsv(r, `column: ${esc(r.column_used)}`);
+            } catch (e) { $('csvErr').textContent = e.message; }
+            b.disabled = false; b.textContent = 'Upload & Analyze';
+        };
+
+        /* ---------- init ---------- */
+        try { const t = localStorage.getItem('ll-theme'); if (t) setTheme(t); } catch (e) { }
+    </script>
+</body>
+
+</html>

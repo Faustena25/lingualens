@@ -1,217 +1,158 @@
 import os
-import io
-import csv
-import json
 import re
+from collections import Counter
+from emoji_utils import predict_with_emoji, prepare_text 
 
-from flask import (
-    Flask, render_template, request, redirect, url_for, flash,
-    send_file, jsonify, abort
-)
+import pandas as pd
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-from models.nlp_engine import analyze_comment
-from models.bias_audit import audit
-from database import db
+from lingualens_core import explain_text
+from emoji_utils import predict_with_emoji
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
-MAX_COMMENTS = 5000  # NFR: Performance — batch cap per SRS
+API_KEY = os.environ.get("YT_API_KEY")
+THRESHOLD = 0.75  # below this top-class confidence -> "Uncertain"
 
 app = Flask(__name__)
-app.secret_key = "lingualens-dev-secret"  # dev only; use env var in production
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB upload cap
-
-YOUTUBE_URL_RE = re.compile(
-    r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([\w-]{11})"
-)
+CORS(app)
 
 
-def get_youtube_video_id(url):
-    m = YOUTUBE_URL_RE.search(url or "")
-    return m.group(1) if m else None
+def classify(text):
+    res = predict_with_emoji(text)
+    label = res["label"]
+    if max(res["scores"].values()) < THRESHOLD:
+        label = "Uncertain"
+    return {"text": text, "label": label, "scores": res["scores"],
+            "source": res.get("source", "model")}
 
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+def extract_video_id(url):
+    m = re.search(r"(?:youtu\.be/|v=|/shorts/|/embed/)([A-Za-z0-9_-]{11})", url)
+    if m:
+        return m.group(1)
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", url):
+        return url
+    return None
 
 
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    """FR1: Data Ingestion — CSV upload or YouTube URL."""
-    source_type = request.form.get("source_type", "csv")
+def fetch_comments(video_id, limit=200):
+    yt = build("youtube", "v3", developerKey=API_KEY)
+    comments, token = [], None
+    while len(comments) < limit:
+        res = yt.commentThreads().list(
+            part="snippet", videoId=video_id, maxResults=100,
+            pageToken=token, textFormat="plainText",
+        ).execute()
+        comments += [i["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
+                     for i in res["items"]]
+        token = res.get("nextPageToken")
+        if not token:
+            break
+    return comments[:limit]
 
-    rows = []  # list of raw comment strings
-    source_ref = None
 
-    if source_type == "youtube":
-        yt_url = request.form.get("youtube_url", "").strip()
-        video_id = get_youtube_video_id(yt_url)
-        if not video_id:
-            flash("That doesn't look like a valid YouTube video URL.", "error")
-            return redirect(url_for("index"))
-        # NOTE: Live YouTube Data API v3 fetching requires a server-side API
-        # key (SRS Security requirement: "never exposed in client-side
-        # code"). This prototype does not ship a key, so we generate a
-        # clearly-labelled sample comment set for the given video so the
-        # rest of the pipeline (FR2-FR5) can be demoed end-to-end. Swap in
-        # a real `youtube.commentThreads().list()` call here once a key is
-        # configured via the YOUTUBE_API_KEY environment variable.
-        rows = _demo_youtube_comments(video_id)
-        source_ref = yt_url
-    else:
-        file = request.files.get("csv_file")
-        if not file or file.filename == "":
-            flash("Please choose a CSV file to upload.", "error")
-            return redirect(url_for("index"))
-        if not file.filename.lower().endswith(".csv"):
-            flash("Only .csv files are supported.", "error")
-            return redirect(url_for("index"))
+def get_text():
+    data = request.get_json(silent=True) or {}
+    text = str(data.get("text", "")).strip()
+    return text if text else None
+
+
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok"})
+
+
+@app.get("/")
+def home():
+    return send_from_directory(".", "index.html")
+
+
+@app.post("/predict")
+def predict():
+    text = get_text()
+    if not text:
+        return jsonify({"error": "Send JSON like {\"text\": \"...\"}"}), 400
+    r = classify(text)
+    return jsonify({"label": r["label"], "scores": r["scores"], "source": r["source"]})
+
+
+@app.post("/explain")
+def explain():
+    text = get_text()
+    if not text:
+        return jsonify({"error": "Send JSON like {\"text\": \"...\"}"}), 400
+    return jsonify(explain_text(prepare_text(text)))
+
+
+@app.post("/youtube")
+def youtube():
+    if not API_KEY:
+        return jsonify({"error": "Server missing YT_API_KEY environment variable."}), 500
+    data = request.get_json(silent=True) or {}
+    vid = extract_video_id(str(data.get("url", "")))
+    if not vid:
+        return jsonify({"error": "Could not find a video ID in that link."}), 400
+    try:
+        n = min(int(data.get("max_comments", 100)), 500)
+    except (TypeError, ValueError):
+        n = 100
+    try:
+        comments = fetch_comments(vid, n)
+    except HttpError as e:
+        reason = ""
         try:
-            stream = io.StringIO(file.stream.read().decode("utf-8-sig"), newline=None)
-            reader = csv.DictReader(stream)
-            col = None
-            if reader.fieldnames:
-                for candidate in ("comment", "review", "text", "Comment", "Review", "Text"):
-                    if candidate in reader.fieldnames:
-                        col = candidate
-                        break
-                if col is None:
-                    col = reader.fieldnames[0]
-            for r in reader:
-                val = (r.get(col) or "").strip()
-                if val:
-                    rows.append(val)
-        except Exception as e:
-            flash(f"Could not parse CSV: {e}", "error")
-            return redirect(url_for("index"))
-        source_ref = file.filename
+            reason = e.error_details[0].get("reason", "")
+        except Exception:
+            pass
+        if reason == "commentsDisabled":
+            return jsonify({"error": "Comments are disabled on this video."}), 400
+        if reason == "videoNotFound":
+            return jsonify({"error": "Video not found."}), 404
+        return jsonify({"error": f"YouTube API error: {reason or e}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    if not comments:
+        return jsonify({"error": "No comments found."}), 400
 
-    if not rows:
-        flash("No usable comments found in the input.", "error")
-        return redirect(url_for("index"))
-
-    if len(rows) > MAX_COMMENTS:
-        flash(f"Input has {len(rows)} comments; only processing the first {MAX_COMMENTS}.", "error")
-        rows = rows[:MAX_COMMENTS]
-
-    results = []
-    for raw in rows:
-        r = analyze_comment(raw)
-        r["raw_text"] = raw
-        results.append(r)
-
-    bias_result = audit(results)
-    analysis_id = db.save_analysis(source_type, source_ref, results, bias_result)
-
-    return redirect(url_for("dashboard", analysis_id=analysis_id))
+    results = [classify(c) for c in comments]
+    summary = dict(Counter(x["label"] for x in results))
+    return jsonify({"video_id": vid, "total": len(results),
+                    "summary": summary, "results": results})
 
 
-def _demo_youtube_comments(video_id):
-    """Placeholder comment generator so the pipeline is demoable without a
-    live YouTube Data API key. Clearly a stand-in — see comment above."""
-    return [
-        "This video is semma nalla, really enjoyed it!",
-        "bakwaas video, waste of time honestly",
-        "adipoli content da, keep it up!",
-        "not bad but could be better",
-        "baagundi ra explanation, chala helpful",
-        "worst editing ever, so boring",
-        "romba informative video, thanks!",
-        "mosham quality audio, couldn't hear anything",
-        "This is amazing, loved every part of it",
-        "kevalam, don't waste your time on this",
-        "kollam presentation, well done team",
-        "faltu content, expected more from this channel",
-        "great explanation, very clear and simple",
-        "ghatiya thumbnail but decent video overall",
-        "zabardast! ekdum mast tha yeh video",
-    ]
+@app.post("/csv")
+def csv_upload():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "Upload a CSV with form field 'file'"}), 400
+    try:
+        df = pd.read_csv(f, encoding="utf-8", on_bad_lines="skip")
+    except Exception as e:
+        return jsonify({"error": f"Could not read CSV: {e}"}), 400
 
+    col = request.form.get("column")
+    if not col or col not in df.columns:
+        names = ["comment", "comments", "text", "review", "reviews", "content", "body", "tweet"]
+        lower = {c.lower().strip(): c for c in df.columns}
+        col = next((lower[n] for n in names if n in lower), None)
+        if col is None:
+            obj = df.select_dtypes(include="object").columns
+            if len(obj) == 0:
+                return jsonify({"error": "No text column found"}), 400
+            col = obj[0]
 
-@app.route("/dashboard/<int:analysis_id>")
-def dashboard(analysis_id):
-    analysis, comments = db.get_analysis(analysis_id)
-    if not analysis:
-        abort(404)
+    n = min(int(request.form.get("max_rows", 500)), 500)
+    texts = [str(t).strip() for t in df[col].dropna().tolist() if str(t).strip()][:n]
+    if not texts:
+        return jsonify({"error": "No text rows found"}), 400
 
-    language_counts, emotion_counts, sentiment_counts = {}, {}, {"Positive": 0, "Negative": 0, "Neutral": 0}
-    for c in comments:
-        language_counts[c["language"]] = language_counts.get(c["language"], 0) + 1
-        emotion_counts[c["emotion"]] = emotion_counts.get(c["emotion"], 0) + 1
-        sentiment_counts[c["sentiment"]] = sentiment_counts.get(c["sentiment"], 0) + 1
-
-    top_positive = sorted(
-        [c for c in comments if c["sentiment"] == "Positive"],
-        key=lambda x: x["confidence"], reverse=True
-    )[:5]
-    top_negative = sorted(
-        [c for c in comments if c["sentiment"] == "Negative"],
-        key=lambda x: x["confidence"], reverse=True
-    )[:5]
-
-    bias_result = audit(comments)  # recompute for display (per_language table)
-
-    return render_template(
-        "dashboard.html",
-        analysis=analysis,
-        comments=comments,
-        language_counts=language_counts,
-        emotion_counts=emotion_counts,
-        sentiment_counts=sentiment_counts,
-        top_positive=top_positive,
-        top_negative=top_negative,
-        bias=bias_result,
-    )
-
-
-@app.route("/history")
-def history():
-    analyses = db.list_analyses()
-    return render_template("history.html", analyses=analyses)
-
-
-@app.route("/history/delete/<int:analysis_id>", methods=["POST"])
-def delete_history(analysis_id):
-    db.delete_analysis(analysis_id)
-    flash("Analysis deleted.", "success")
-    return redirect(url_for("history"))
-
-
-@app.route("/export/<int:analysis_id>")
-def export_csv(analysis_id):
-    analysis, comments = db.get_analysis(analysis_id)
-    if not analysis:
-        abort(404)
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["comment", "language", "sentiment", "confidence", "emotion", "uncertain"])
-    for c in comments:
-        writer.writerow([
-            c["raw_text"], c["language"], c["sentiment"],
-            c["confidence"], c["emotion"], bool(c["is_uncertain"])
-        ])
-    buf.seek(0)
-    return send_file(
-        io.BytesIO(buf.getvalue().encode("utf-8")),
-        mimetype="text/csv",
-        as_attachment=True,
-        download_name=f"lingualens_analysis_{analysis_id}.csv",
-    )
-
-
-@app.errorhandler(404)
-def not_found(e):
-    return render_template("error.html", message="Analysis not found."), 404
-
-
-@app.errorhandler(413)
-def too_large(e):
-    flash("File too large (max 10 MB).", "error")
-    return redirect(url_for("index"))
+    results = [classify(t) for t in texts]
+    summary = dict(Counter(x["label"] for x in results))
+    return jsonify({"column_used": col, "total": len(results),
+                    "summary": summary, "results": results})
 
 
 if __name__ == "__main__":
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    db.init_db()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(host="127.0.0.1", port=5000, debug=False)
