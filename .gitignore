@@ -1,0 +1,11 @@
+lingualens_final/
+lingualens_v2/
+models/
+*.safetensors
+*.bin
+__pycache__/
+*.pyc
+data/*.csv
+data/dravidiancodemix/
+.env
+*.docx

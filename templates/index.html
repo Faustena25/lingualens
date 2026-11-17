@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>LinguaLens</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: #f6f7fb;
+        }
+
+        .badge-Positive {
+            background: #198754
+        }
+
+        .badge-Negative {
+            background: #dc3545
+        }
+
+        .badge-Neutral {
+            background: #6c757d
+        }
+
+        .badge-Uncertain {
+            background: #fd7e14
+        }
+
+        td.text {
+            max-width: 520px;
+            word-break: break-word;
+        }
+
+        .tok {
+            padding: 2px 4px;
+            border-radius: 4px;
+            margin: 2px;
+            display: inline-block;
+        }
+
+        .filters button.active {
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container py-4">
+        <h2 class="mb-1">LinguaLens</h2>
+        <p class="text-muted">Sentiment analysis with explanations for Tanglish, Hinglish and Manglish text.</p>
+
+        <div class="card p-3 mb-4">
+            <ul class="nav nav-tabs mb-3" id="tabs">
+                <li class="nav-item"><button class="nav-link active" data-mode="file">CSV file</button></li>
+                <li class="nav-item"><button class="nav-link" data-mode="text">Paste text</button></li>
+                <li class="nav-item"><button class="nav-link" data-mode="url">YouTube link</button></li>
+            </ul>
+            <div id="in-file"><input type="file" id="file" accept=".csv" class="form-control"></div>
+            <div id="in-text" class="d-none"><textarea id="text" rows="5" class="form-control"
+                    placeholder="One comment per line"></textarea></div>
+            <div id="in-url" class="d-none"><input type="text" id="url" class="form-control"
+                    placeholder="https://youtu.be/..."></div>
+            <div class="mt-3">
+                <button id="go" class="btn btn-primary">Analyze</button>
+                <span id="status" class="ms-3 text-muted"></span>
+            </div>
+        </div>
+
+        <div id="results" class="d-none">
+            <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                    <div class="card p-3"><canvas id="chart"></canvas></div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card p-3 h-100">
+                        <h5>Summary</h5>
+                        <div id="summary" class="mb-2"></div>
+                        <div class="text-muted small" id="meta"></div>
+                        <div class="mt-auto"><button id="dl" class="btn btn-outline-secondary btn-sm">Download
+                                CSV</button></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-3">
+                <div class="filters mb-3" id="filters"></div>
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Comment</th>
+                            <th>Sentiment</th>
+                            <th>Conf.</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rows"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mode = 'file', chart, data = [], filter = 'All';
+        const $ = id => document.getElementById(id);
+        const COLORS = { Positive: '#198754', Negative: '#dc3545', Neutral: '#6c757d', Uncertain: '#fd7e14' };
+        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const conf = r => Math.max(...Object.values(r.scores || { 0: 0 }));
+
+        document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+            document.querySelectorAll('#tabs button').forEach(x => x.classList.remove('active'));
+            b.classList.add('active'); mode = b.dataset.mode;
+            ['file', 'text', 'url'].forEach(m => $('in-' + m).classList.toggle('d-none', m !== mode));
+        });
+
+        $('go').onclick = async () => {
+            let req;
+            if (mode === 'file') {
+                const f = $('file').files[0]; if (!f) return alert('Choose a CSV file');
+                const fd = new FormData(); fd.append('file', f);
+                req = fetch('/csv', { method: 'POST', body: fd });
+            } else if (mode === 'text') {
+                if (!$('text').value.trim()) return alert('Paste some text');
+                req = fetch('/text', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: $('text').value })
+                });
+            } else {
+                if (!$('url').value.trim()) return alert('Enter a YouTube link');
+                req = fetch('/youtube', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: $('url').value.trim(), max_comments: 200 })
+                });
+            }
+            $('status').textContent = 'Analyzing... this can take a minute'; $('go').disabled = true;
+            try {
+                const r = await req, j = await r.json();
+                if (!r.ok) throw new Error(j.error || 'Request failed');
+                render(j);
+                $('status').textContent = `Done: ${j.total} comments`;
+            } catch (e) { $('status').textContent = ''; alert(e.message); }
+            $('go').disabled = false;
+        };
+
+        function render(j) {
+            data = j.results; filter = 'All';
+            $('results').classList.remove('d-none');
+            const labels = Object.keys(j.summary);
+            $('summary').innerHTML = labels.map(l =>
+                `<span class="badge badge-${l} me-2 fs-6">${l}: ${j.summary[l]} (${(100 * j.summary[l] / j.total).toFixed(0)}%)</span>`).join('');
+            $('meta').textContent = j.column_used ? `Column used: ${j.column_used}` : (j.video_id ? `Video: ${j.video_id}` : '');
+            if (chart) chart.destroy();
+            chart = new Chart($('chart'), {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data: labels.map(l => j.summary[l]), backgroundColor: labels.map(l => COLORS[l]) }] }
+            });
+            $('filters').innerHTML = ['All', ...labels].map(l =>
+                `<button class="btn btn-sm btn-outline-secondary me-1 ${l === 'All' ? 'active' : ''}" onclick="setFilter('${l}', this)">${l}</button>`).join('');
+            drawRows();
+        }
+
+        function setFilter(l, btn) {
+            filter = l;
+            document.querySelectorAll('#filters button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active'); drawRows();
+        }
+
+        function drawRows() {
+            $('rows').innerHTML = data.map((r, i) => ({ r, i })).filter(x => filter === 'All' || x.r.label === filter).map(({ r, i }) => `
+    <tr><td>${i + 1}</td><td class="text">${esc(r.text)}</td>
+    <td><span class="badge badge-${r.label}">${r.label}</span>${r.source && r.source !== 'model' ? ` <small class="text-muted">(${esc(r.source)})</small>` : ''}</td>
+    <td>${conf(r).toFixed(2)}</td>
+    <td><button class="btn btn-sm btn-outline-primary" onclick="explain(${i}, this)">Explain</button></td></tr>
+    <tr id="ex-${i}" class="d-none"><td></td><td colspan="4" class="bg-light"></td></tr>`).join('');
+        }
+
+        async function explain(i, btn) {
+            const row = $('ex-' + i), cell = row.children[1];
+            if (!row.classList.contains('d-none')) { row.classList.add('d-none'); return; }
+            btn.disabled = true; btn.textContent = '...';
+            try {
+                const r = await fetch('/explain', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: data[i].text })
+                });
+                cell.innerHTML = renderExplain(await r.json());
+            } catch (e) { cell.textContent = 'Explanation failed: ' + e.message; }
+            row.classList.remove('d-none'); btn.disabled = false; btn.textContent = 'Explain';
+        }
+
+        // Handles common SHAP output shapes; unknown shapes fall back to raw JSON.
+        function renderExplain(e) {
+            let toks = e.tokens || e.words || e.explanation || e.contributions || e.top_words;
+            let pairs = null;
+            if (Array.isArray(toks)) {
+                if (toks.length && Array.isArray(toks[0])) pairs = toks.map(t => [t[0], Number(t[1])]);
+                else if (toks.length && typeof toks[0] === 'object') {
+                    const k = ['score', 'weight', 'value', 'shap', 'contribution'].find(k => k in toks[0]);
+                    const n = ['token', 'word', 'text'].find(k => k in toks[0]);
+                    if (k && n) pairs = toks.map(t => [t[n], Number(t[k])]);
+                }
+            } else if (toks && typeof toks === 'object') {
+                pairs = Object.entries(toks).map(([w, v]) => [w, Number(v)]);
+            }
+            if (!pairs || !pairs.length) return `<pre class="mb-0 small">${esc(JSON.stringify(e, null, 2))}</pre>`;
+            const max = Math.max(...pairs.map(p => Math.abs(p[1])), 1e-9);
+            const head = e.label ? `<div class="mb-2">Prediction: <b>${esc(e.label)}</b></div>` : '';
+            return head + pairs.map(([w, v]) => {
+                const a = (Math.abs(v) / max * 0.75).toFixed(2), c = v >= 0 ? '25,135,84' : '220,53,69';
+                return `<span class="tok" style="background:rgba(${c},${a})" title="${v.toFixed(3)}">${esc(w)}</span>`;
+            }).join('') + '<div class="small text-muted mt-2">Green pushes toward the predicted class, red pushes against.</div>';
+        }
+
+        $('dl').onclick = () => {
+            const q = s => `"${String(s).replace(/"/g, '""')}"`;
+            const csv = 'text,label,confidence\n' + data.map(r => [q(r.text), r.label, conf(r).toFixed(3)].join(',')).join('\n');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+            a.download = 'lingualens_results.csv'; a.click();
+        };
+    </script>
+</body>
+
+</html>
